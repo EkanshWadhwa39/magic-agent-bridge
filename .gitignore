@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Magic generated files (don't commit extracted netlists)
+*.ext
+*.spice
+*.sim
+*.node
+*.res
+*.cap
+!tests/unit/fixtures/*.ext
+
+# Editor
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/

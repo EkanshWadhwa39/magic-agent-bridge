@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "magic-agent-bridge"
+version = "0.2.0"
+description = "MCP server that drives a live Magic VLSI session over a local TCP bridge"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["magic", "vlsi", "eda", "mcp", "claude"]
+
+dependencies = [
+    "mcp[cli]>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "coverage[toml]>=7.0",
+]
+
+[project.scripts]
+magic-agent-bridge = "magic_agent_bridge.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["src/magic_agent_bridge"]
+omit = ["*/tests/*"]
