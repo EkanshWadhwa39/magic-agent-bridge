@@ -25,7 +25,7 @@ cairo + XQuartz on macOS). A bare socket sidesteps that entirely.
 Claude Code / any MCP client
         |  MCP tool call, e.g. magic_eval("extract all")
         v
-magic_mcp_server.py  --TCP, 127.0.0.1:5566-->  magic_bridge.tcl
+magic-agent-bridge   --TCP, 127.0.0.1:5566-->  magic_bridge.tcl
    (stdio MCP server)                        (sourced into your
                                                already-running Magic)
         ^                                          |
@@ -34,13 +34,14 @@ magic_mcp_server.py  --TCP, 127.0.0.1:5566-->  magic_bridge.tcl
 
 - `magic_bridge.tcl` - source this ONCE inside a Magic session you already
   have open. Opens a localhost-only socket server.
-- `magic_mcp_server.py` - the MCP-facing side. Register this with Claude
-  Code (or any MCP client); it forwards tool calls to the socket above.
+- `src/magic_agent_bridge/server.py` - the MCP-facing side. Register this
+  with Claude Code (or any MCP client) via the `magic-agent-bridge` console
+  script; it forwards tool calls to the socket above.
 
 ## Setup
 
 ```bash
-pip install "mcp[cli]"
+pip install -e .
 ```
 
 1. Launch Magic as normal:
@@ -54,12 +55,13 @@ pip install "mcp[cli]"
    You should see: `magic_bridge: listening on 127.0.0.1:5566`
 3. Register the MCP server with Claude Code:
    ```bash
-   claude mcp add magic-bridge -- python3 /path/to/magic-agent-bridge/magic_mcp_server.py
+   claude mcp add magic-bridge -- magic-agent-bridge
    ```
-4. In a Claude Code session, the tools `magic_eval`, `magic_load`,
-   `magic_extract_pipeline`, `magic_drc_check`, `magic_screenshot` are now
-   available. Claude can now, e.g., load a cell, run the extraction
-   pipeline, check DRC, and screenshot the result - all without you typing
+4. In a Claude Code session, tools like `magic_eval`, `magic_load`,
+   `magic_extract_pipeline`, `magic_drc_report`, `magic_paint`,
+   `magic_query_box`, and `magic_screenshot` are now available. Claude can
+   now, e.g., load a cell, run the extraction pipeline, check DRC, paint
+   geometry, and verify layout state as text - all without you typing
    anything into tkcon yourself.
 
 ## What this does NOT do (yet)

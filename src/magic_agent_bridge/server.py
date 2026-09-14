@@ -35,7 +35,7 @@ def _strip_ok(result: str) -> str:
     return result[3:].strip() if result.startswith("OK ") else result
 
 
-# ── original tools (behaviour unchanged) ───────────────────────────────────
+# Core tools: raw eval, load, extraction pipeline, DRC, screenshot.
 
 @mcp.tool()
 def magic_eval(command: str) -> str:
@@ -110,7 +110,7 @@ def magic_screenshot(save_path: str, delay_seconds: float = 0.3) -> str:
         return f"ERR {e}"
 
 
-# ── new tools ───────────────────────────────────────────────────────────────
+# Structured query and layout-editing tools added in v2.
 
 @mcp.tool()
 def magic_eval_batch(commands: list[str]) -> str:
@@ -138,7 +138,7 @@ def magic_query_box() -> str:
     result = _send("box values")
     if result.startswith("ERR"):
         return result
-    payload = result[3:].strip() if result.startswith("OK ") else result
+    payload = _strip_ok(result)
     parts = payload.split()
     if len(parts) >= 4:
         try:
@@ -171,7 +171,7 @@ def magic_query_cells() -> str:
     result = _send("cellname list allcells")
     if result.startswith("ERR"):
         return result
-    payload = result[3:].strip() if result.startswith("OK ") else result
+    payload = _strip_ok(result)
     cells = [c for c in payload.split() if c]
     return json.dumps({"cells": cells})
 
@@ -181,8 +181,12 @@ def magic_query_labels() -> str:
     """
     Select all labels in the current cell and return what was selected.
     Returns JSON {"raw": "<magic what-output after select labels>"}.
+    If the select itself fails, returns that error instead of stale
+    selection data from a previous call.
     """
-    _send("select labels")
+    select_r = _send("select labels")
+    if select_r.startswith("ERR"):
+        return json.dumps({"error": select_r})
     result = _send("what -list")
     return json.dumps({"raw": result})
 
@@ -220,7 +224,7 @@ def magic_drc_report() -> str:
     why = _send("drc list why")
     count = 0
     if count_r.startswith("OK "):
-        payload = count_r[3:].strip()
+        payload = _strip_ok(count_r)
         try:
             count = int(payload.split()[0])
         except (ValueError, IndexError):
@@ -237,8 +241,12 @@ def magic_paint(layer: str, llx: int, lly: int, urx: int, ury: int) -> str:
     """
     Set the Magic box to (llx, lly, urx, ury) in internal units (centilambda),
     then paint the given layer. Returns "box: <result>\\npaint: <result>".
+    Stops before painting if the box command itself fails, so a bad box
+    can't cause a paint against a stale region.
     """
     r1 = _send(f"box {llx} {lly} {urx} {ury}")
+    if r1.startswith("ERR"):
+        return f"box: {r1}\npaint: skipped (box command failed)"
     r2 = _send(f"paint {layer}")
     return f"box: {r1}\npaint: {r2}"
 
@@ -248,8 +256,12 @@ def magic_erase(layer: str, llx: int, lly: int, urx: int, ury: int) -> str:
     """
     Set the Magic box to (llx, lly, urx, ury) in internal units (centilambda),
     then erase the given layer. Returns "box: <result>\\nerase: <result>".
+    Stops before erasing if the box command itself fails, so a bad box
+    can't cause an erase against a stale region.
     """
     r1 = _send(f"box {llx} {lly} {urx} {ury}")
+    if r1.startswith("ERR"):
+        return f"box: {r1}\nerase: skipped (box command failed)"
     r2 = _send(f"erase {layer}")
     return f"box: {r1}\nerase: {r2}"
 
@@ -259,8 +271,12 @@ def magic_place_label(name: str, layer: str, x: int, y: int) -> str:
     """
     Place a port label named <name> on <layer> at position (x, y) in internal units.
     Sets a point box at (x, y) then calls Magic's label command.
+    Stops before labeling if the box command itself fails, so a bad box
+    can't cause a label to be placed at a stale position.
     """
     r1 = _send(f"box {x} {y} {x} {y}")
+    if r1.startswith("ERR"):
+        return f"box: {r1}\nlabel: skipped (box command failed)"
     r2 = _send(f"label {name} center {layer}")
     return f"box: {r1}\nlabel: {r2}"
 
@@ -289,7 +305,7 @@ def magic_layout_summary() -> str:
     return "\n".join(lines)
 
 
-# ── screenshot helpers ──────────────────────────────────────────────────────
+# Screenshot helpers, one per platform.
 
 def _capture_screenshot(save_path: str) -> None:
     system = platform.system()
@@ -310,7 +326,11 @@ def _capture_macos(save_path: str) -> None:
     try:
         script = (
             'tell application "System Events"\n'
-            '    set p to (first process whose name contains "magic")\n'
+            '    if exists process "magic" then\n'
+            '        set p to process "magic"\n'
+            '    else\n'
+            '        set p to (first process whose name contains "magic")\n'
+            '    end if\n'
             '    set b to bounds of (first window of p)\n'
             '    return (item 1 of b) & " " & (item 2 of b) & " " '
             '& (item 3 of b) & " " & (item 4 of b)\n'
@@ -350,7 +370,7 @@ def _capture_linux(save_path: str) -> None:
     )
 
 
-# ── entry point ─────────────────────────────────────────────────────────────
+# Entry point
 
 def main() -> None:
     mcp.run()

@@ -34,6 +34,10 @@ proc magic_bridge_handle {sock} {
         return
     }
     set cmd [gets $sock]
+    if {[fblocked $sock]} {
+        # Only a partial line has arrived so far; wait for the rest.
+        return
+    }
     if {$cmd eq ""} { return }
 
     set status [catch {uplevel #0 $cmd} output]
