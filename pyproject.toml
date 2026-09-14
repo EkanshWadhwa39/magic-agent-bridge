@@ -12,7 +12,9 @@ license = { text = "MIT" }
 keywords = ["magic", "vlsi", "eda", "mcp", "claude"]
 
 dependencies = [
-    "mcp[cli]>=1.0",
+    # mcp 2.x renamed FastMCP -> MCPServer and moved import paths; pin to the
+    # 1.x line since server.py is written against the v1 FastMCP API.
+    "mcp[cli]>=1.0,<2",
 ]
 
 [project.optional-dependencies]
