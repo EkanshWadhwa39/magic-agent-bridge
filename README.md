@@ -69,26 +69,24 @@ pip install -e .
 - **Doesn't draw for you from scratch via natural language.** `magic_eval`
   can run any Magic command including `paint`/`box`, so in principle an
   agent could construct geometry rectangle by rectangle - but there's no
-  higher-level "draw an inverter with W=1.8um" primitive yet. That's the
-  natural v1 target: a small library of parametric-cell generators (inverter,
-  chain, ring-oscillator-of-N) that emit the right sequence of `box`/`paint`
+  higher-level "draw an inverter with W=1.8um" primitive yet. A natural next
+  step is a small library of parametric-cell generators (inverter, chain,
+  ring-oscillator-of-N) that emit the right sequence of `box`/`paint`
   commands from a spec.
-- **Screenshot is whole-screen, not window-scoped.** Fine for a single-monitor
-  setup where Magic is frontmost; a real v1 wants to target Magic's window
-  specifically (via `CGWindowListCopyWindowInfo` or an AppleScript helper) so
-  screenshots work regardless of what else is on screen.
 - **No auth beyond localhost binding.** Fine for a solo dev machine. Do not
   run this where other local users/processes are untrusted.
-- **One Magic session, hardcoded port.** No multi-session or port-negotiation
-  support - if you need to talk to two Magic instances at once, bump
-  `magic_bridge_port` in one of them and register a second MCP server
-  pointed at the new port.
+- **One Magic session per MCP server.** No multi-session or port-negotiation
+  support - if you need to talk to two Magic instances at once, set
+  `magic_bridge_port` to a different value in one of them, then point a
+  second MCP server at it via the `MAGIC_BRIDGE_PORT` env var.
+- **Windows screenshot support is missing.** The screenshot tool supports
+  macOS (window-scoped) and Linux (`scrot`/`import`/`grim`); on Windows it
+  returns an explicit error rather than a screenshot. All other tools work
+  fine on Windows if Magic itself is reachable (e.g. running under WSL).
 
 ## Status
 
-v0 - functional command bridge + whole-screen screenshot. Built to unblock
-Q3(c)/Q6 layout work in a VLSI coursework assignment; scoped deliberately
-small so it didn't eat the time budget for the actual assignment. Natural
-next steps (parametric cell generators, window-scoped screenshots, a closed
-vision loop where Claude checks its own drawn geometry before extracting)
-are real and worth doing, just not this week.
+v2 - structured query tools, `.ext` file parsing, DRC reporting, layout
+painting/erasing/labeling, window-scoped screenshots on macOS, and
+env-var-configurable host/port, on top of the original raw command bridge.
+Built for solo/small-team use; contributions and issues welcome.
