@@ -1,19 +1,10 @@
 """
-magic_agent_bridge/server.py
-
 MCP server that lets Claude Code (or any MCP-speaking agent) drive a live,
 already-running Magic VLSI session over the TCP bridge opened by magic_bridge.tcl.
 
-v2: structured query tools, .ext parsing, DRC report, layout painting,
-    window-scoped screenshot, cross-platform, env-var configurable host/port.
-
-Setup:
     pip install -e .
-
-Usage:
-    1. In Magic's tkcon:  source /path/to/magic_bridge.tcl
-    2. Register:  claude mcp add magic-bridge -- magic-agent-bridge
-    3. Tools are now available in Claude Code sessions.
+    (in Magic's tkcon) source /path/to/magic_bridge.tcl
+    claude mcp add magic-bridge -- magic-agent-bridge
 """
 
 import json
@@ -35,7 +26,7 @@ def _strip_ok(result: str) -> str:
     return result[3:].strip() if result.startswith("OK ") else result
 
 
-# Core tools: raw eval, load, extraction pipeline, DRC, screenshot.
+# raw eval / load / extraction pipeline / DRC / screenshot
 
 @mcp.tool()
 def magic_eval(command: str) -> str:
@@ -110,15 +101,11 @@ def magic_screenshot(save_path: str, delay_seconds: float = 0.3) -> str:
         return f"ERR {e}"
 
 
-# Structured query and layout-editing tools added in v2.
+# structured queries + layout editing
 
 @mcp.tool()
 def magic_eval_batch(commands: list[str]) -> str:
-    """
-    Run multiple Tcl/Magic commands sequentially. Returns a JSON list of
-    {command, result} dicts. Stops on the first ERR response.
-    Avoids N round-trips for multi-step sequences.
-    """
+    """Run several commands in sequence, stop on first ERR. Beats N separate round-trips."""
     results = []
     for cmd in commands:
         r = _send(cmd)
@@ -130,11 +117,7 @@ def magic_eval_batch(commands: list[str]) -> str:
 
 @mcp.tool()
 def magic_query_box() -> str:
-    """
-    Query the current Magic selection box. Returns JSON with
-    llx/lly/urx/ury in internal units (centilambda) and width/height.
-    No screenshot needed for coordinate verification.
-    """
+    """Current selection box as JSON — llx/lly/urx/ury/width/height, centilambda units."""
     result = _send("box values")
     if result.startswith("ERR"):
         return result
@@ -154,20 +137,14 @@ def magic_query_box() -> str:
 
 @mcp.tool()
 def magic_query_what() -> str:
-    """
-    Return text describing what is currently selected in Magic.
-    Returns JSON {"raw": "<magic what-output>"}.
-    """
+    """What's currently selected, as JSON {"raw": ...}."""
     result = _send("what -list")
     return json.dumps({"raw": result})
 
 
 @mcp.tool()
 def magic_query_cells() -> str:
-    """
-    List all cell names known to the current Magic session.
-    Returns JSON {"cells": ["name1", ...]}.
-    """
+    """All cell names known to the session, as JSON {"cells": [...]}."""
     result = _send("cellname list allcells")
     if result.startswith("ERR"):
         return result
@@ -178,14 +155,11 @@ def magic_query_cells() -> str:
 
 @mcp.tool()
 def magic_query_labels() -> str:
-    """
-    Select all labels in the current cell and return what was selected.
-    Returns JSON {"raw": "<magic what-output after select labels>"}.
-    If the select itself fails, returns that error instead of stale
-    selection data from a previous call.
-    """
+    """Select all labels in the cell, then report what was selected."""
     select_r = _send("select labels")
     if select_r.startswith("ERR"):
+        # bail here instead of falling through to `what` - otherwise we'd
+        # report whatever was selected from a previous call, not labels
         return json.dumps({"error": select_r})
     result = _send("what -list")
     return json.dumps({"raw": result})
@@ -194,14 +168,8 @@ def magic_query_labels() -> str:
 @mcp.tool()
 def magic_parse_ext(ext_file_path: str) -> str:
     """
-    Parse a Magic .ext extraction file from disk into structured JSON.
-
-    Returns keys: meta (scale, tech, resistclasses), nodes (name, cap_ff,
-    layer, coords), caps (node_a, node_b, value_ff), subcaps, fets
-    (type, width, length, gate, source, drain).
-
-    Use this as the primary connectivity verifier — no screenshot needed.
-    Run magic_extract_pipeline first to generate the .ext file.
+    Parse a .ext extraction file into JSON (meta/nodes/caps/subcaps/fets).
+    Run magic_extract_pipeline first to generate the file.
     """
     try:
         data = parse_ext(ext_file_path)
@@ -214,11 +182,7 @@ def magic_parse_ext(ext_file_path: str) -> str:
 
 @mcp.tool()
 def magic_drc_report() -> str:
-    """
-    Run full DRC and return a JSON report with violation count and drc-why text.
-    100% text-based — no screenshot needed for DRC verification.
-    Returns {"violation_count": N, "check_result": "...", "why_result": "..."}.
-    """
+    """Run full DRC, return {violation_count, check_result, why_result} as JSON."""
     check = _send("drc check")  # forces a full re-scan; result is printed, not returned
     count_r = _send("drc list count total")
     why = _send("drc list why")
@@ -238,14 +202,10 @@ def magic_drc_report() -> str:
 
 @mcp.tool()
 def magic_paint(layer: str, llx: int, lly: int, urx: int, ury: int) -> str:
-    """
-    Set the Magic box to (llx, lly, urx, ury) in internal units (centilambda),
-    then paint the given layer. Returns "box: <result>\\npaint: <result>".
-    Stops before painting if the box command itself fails, so a bad box
-    can't cause a paint against a stale region.
-    """
+    """Set the box to (llx, lly, urx, ury) and paint the given layer."""
     r1 = _send(f"box {llx} {lly} {urx} {ury}")
     if r1.startswith("ERR"):
+        # bad box -> don't paint, we'd be hitting whatever region was left over
         return f"box: {r1}\npaint: skipped (box command failed)"
     r2 = _send(f"paint {layer}")
     return f"box: {r1}\npaint: {r2}"
@@ -253,12 +213,7 @@ def magic_paint(layer: str, llx: int, lly: int, urx: int, ury: int) -> str:
 
 @mcp.tool()
 def magic_erase(layer: str, llx: int, lly: int, urx: int, ury: int) -> str:
-    """
-    Set the Magic box to (llx, lly, urx, ury) in internal units (centilambda),
-    then erase the given layer. Returns "box: <result>\\nerase: <result>".
-    Stops before erasing if the box command itself fails, so a bad box
-    can't cause an erase against a stale region.
-    """
+    """Set the box to (llx, lly, urx, ury) and erase the given layer."""
     r1 = _send(f"box {llx} {lly} {urx} {ury}")
     if r1.startswith("ERR"):
         return f"box: {r1}\nerase: skipped (box command failed)"
@@ -268,12 +223,7 @@ def magic_erase(layer: str, llx: int, lly: int, urx: int, ury: int) -> str:
 
 @mcp.tool()
 def magic_place_label(name: str, layer: str, x: int, y: int) -> str:
-    """
-    Place a port label named <name> on <layer> at position (x, y) in internal units.
-    Sets a point box at (x, y) then calls Magic's label command.
-    Stops before labeling if the box command itself fails, so a bad box
-    can't cause a label to be placed at a stale position.
-    """
+    """Drop a point box at (x, y) and label it on the given layer."""
     r1 = _send(f"box {x} {y} {x} {y}")
     if r1.startswith("ERR"):
         return f"box: {r1}\nlabel: skipped (box command failed)"

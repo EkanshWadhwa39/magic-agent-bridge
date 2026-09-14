@@ -1,14 +1,7 @@
-"""ext_parser.py — Parse Magic .ext extraction files into JSON-serialisable dicts.
+"""Parse Magic .ext extraction files into JSON-serialisable dicts.
 
-Usage:
-    from magic_agent_bridge.ext_parser import parse_ext, ExtParseError
-
-    data = parse_ext("/path/to/cell.ext")
-    # data keys: meta, nodes, caps, subcaps, fets
-
-The .ext format is line-oriented with keyword-prefixed records:
-    timestamp, version, tech, style, scale, resistclasses
-    node, cap, subcap, fet
+.ext is line-oriented, keyword-prefixed records: timestamp, version, tech,
+style, scale, resistclasses, node, cap, subcap, fet.
 """
 
 from __future__ import annotations
@@ -34,19 +27,7 @@ def _tokenize(line: str) -> list[str]:
 
 
 def parse_ext(path: str | Path) -> dict[str, Any]:
-    """Parse a Magic .ext file from disk into a structured dict.
-
-    Returns a dict with keys:
-        meta       — header fields (timestamp, version, tech, style, scale, resistclasses)
-        nodes      — list of node records
-        caps       — list of inter-node capacitor records (value_ff in femtofarads)
-        subcaps    — list of substrate capacitor records (can be negative)
-        fets       — list of transistor records
-
-    Raises:
-        FileNotFoundError  if the file does not exist.
-        ExtParseError      if a data line is malformed.
-    """
+    """Parse a .ext file into {meta, nodes, caps, subcaps, fets}. cap values are in fF."""
     text = Path(path).read_text()
     return _parse(text, source=str(path))
 
